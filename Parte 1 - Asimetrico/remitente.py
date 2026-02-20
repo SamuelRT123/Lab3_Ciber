@@ -3,24 +3,23 @@ import socket
 import struct
 import base64
 import secrets
-from typing import Optional
+import time
+from typing import Tuple
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
-import time
 
 
-HOST = "127.0.0.1"
+HOST = "192.101.30.10"
 PORT = 5005
 
-ARCHIVO_A_ENVIAR = "Parte 1 - Asimetrico/archivo.txt"  # cambia la ruta si quieres
+ARCHIVO_A_ENVIAR = "archivo.txt"  # cambia la ruta si quieres
 
 
 # =========================================================
-# AES
+# TU "AES" (Fernet) basado en s_shared (copiado tal cual)
 # =========================================================
-
 def _fernet_from_shared(s_shared: int) -> Fernet:
     if not isinstance(s_shared, int):
         raise TypeError("s_shared debe ser int")
@@ -42,12 +41,10 @@ def cifrar_bytes(data: bytes, s_shared: int) -> bytes:
     fernet = _fernet_from_shared(s_shared)
     return fernet.encrypt(data)
 
-def descifrar_bytes(data_enc: bytes, s_shared: int) -> bytes:
-    fernet = _fernet_from_shared(s_shared)
-    return fernet.decrypt(data_enc)
 
-
-
+# =========================
+# Socket framing helpers
+# =========================
 def recv_exact(sock: socket.socket, n: int) -> bytes:
     data = b""
     while len(data) < n:
@@ -68,9 +65,9 @@ def recv_block(sock: socket.socket) -> bytes:
 
 
 # =========================
-# RSA
+# RSA helpers
 # =========================
-def generar_rsa() -> tuple[rsa.RSAPrivateKey, bytes]:
+def generar_rsa() -> Tuple[rsa.RSAPrivateKey, bytes]:
     priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     pub_pem = priv.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -93,17 +90,16 @@ def rsa_oaep_cifrar(pub_pem: bytes, data: bytes) -> bytes:
     )
 
 
-
+# =========================
+# s_shared generator (int)
+# =========================
 def generar_s_shared_int(bits: int = 256) -> int:
-    """
-    Genera un int aleatorio que será el secreto compartido.
-    (Equivalente a una llave simétrica, pero en int como tu AES.py espera.)
-    """
     return secrets.randbits(bits)
 
 
 def main():
-    t_total_inicio = time.perf_counter()
+    t_client_start = time.perf_counter()
+    t_inicio_e2e = time.time()
 
     if not os.path.exists(ARCHIVO_A_ENVIAR):
         raise FileNotFoundError(f"No existe el archivo: {ARCHIVO_A_ENVIAR}")
@@ -121,31 +117,33 @@ def main():
         send_block(s, client_pub_pem)           # Client -> Server
         print(f"[Client] Recibida public key del server ({len(server_pub_pem)} bytes)")
 
-        # 2) Generar s_shared (int) y cifrarlo con RSA del server
+        # 2) Enviar timestamp para medir end-to-end en el server
+        send_block(s, struct.pack(">d", t_inicio_e2e))
+
+        # 3) Generar s_shared (int) y cifrarlo con RSA del server
         s_shared = generar_s_shared_int(256)
         print(f"[Client] s_shared generado: {s_shared}")
 
-        #s_shared aleatorio
         s_shared_bytes = s_shared.to_bytes((s_shared.bit_length() + 7) // 8 or 1, "big")
         s_shared_cipher = rsa_oaep_cifrar(server_pub_pem, s_shared_bytes)
         send_block(s, s_shared_cipher)
         print(f"[Client] Enviado s_shared cifrado (RSA-OAEP) ({len(s_shared_cipher)} bytes)")
 
+        # 4) Cifrar archivo con TU AES(Fernet) y enviar
         with open(ARCHIVO_A_ENVIAR, "rb") as f:
             data = f.read()
 
         data_enc = cifrar_bytes(data, s_shared)
 
-        # convención: nombre .crypt
         filename_send = os.path.basename(ARCHIVO_A_ENVIAR) + ".crypt"
-
         send_block(s, filename_send.encode("utf-8"))
         send_block(s, data_enc)
-        print(f"[Client] Archivo cifrado y enviado: {filename_send} ({len(data_enc)} bytes)")
-        
-        t_total_fin = time.perf_counter()
-        print(f"[Client] Tiempo total (cliente): {t_total_fin - t_total_inicio:.6f} s")
-        
-        
+
+        print(f"[Client] OK ✅ Archivo cifrado y enviado: {filename_send} ({len(data_enc)} bytes)")
+
+    t_client_end = time.perf_counter()
+    print(f"[Client] Tiempo total (cliente): {t_client_end - t_client_start:.6f} s")
+
+
 if __name__ == "__main__":
     main()
