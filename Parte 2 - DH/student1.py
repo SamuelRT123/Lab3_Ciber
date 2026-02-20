@@ -95,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "saved_as": out_path})
 
 def main():
-    host = "0.0.0.0"
+    host = "192.101.30.10"
     port = 8000
     print(f"HTTP server escuchando en http://{host}:{port}")
     print("Endpoints:")
