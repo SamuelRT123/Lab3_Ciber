@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import json, base64, os, urllib.request
 
-import AES  # el AES.py de arriba
+import time
+import AES
 
 def http_get_json(url: str) -> dict:
     with urllib.request.urlopen(url) as r:
@@ -23,6 +24,7 @@ def main():
 
     print("=== CLIENTE: Diffie-Hellman + envío de archivo ===")
 
+    t_server_start = time.perf_counter()
     # 1) Recibir params del server
     params = http_get_json(SERVER + "/params")
     p = int(params["p"])
@@ -70,8 +72,12 @@ def main():
         "cipher_b64": base64.b64encode(cipher).decode("utf-8")
     }
 
+    t_client_end = time.perf_counter()
+    print(f"Tiempo total: {t_client_end - t_server_start:.6f} s")
+
     print("[HTTP] Enviando archivo cifrado a /upload ...")
     resp = http_post_json(SERVER + "/upload", payload)
+    
     print("[HTTP] Respuesta server:")
     print(resp)
 

@@ -2,6 +2,8 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json, base64, os
 
+import time
+
 import AES  # el AES.py de arriba
 
 # =========================
@@ -95,6 +97,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "saved_as": out_path})
 
 def main():
+    
+    t_server_start = time.perf_counter()
     host = "192.101.30.10"
     port = 8000
     print(f"HTTP server escuchando en http://{host}:{port}")
@@ -102,6 +106,10 @@ def main():
     print("  GET  /params")
     print("  POST /upload (B, filename, cipher_b64)\n")
     HTTPServer((host, port), Handler).serve_forever()
+    
+    t_client_end = time.perf_counter()
+    print(f"Tiempo total: {t_client_end - t_server_start:.6f} s")
+
 
 if __name__ == "__main__":
     main()
