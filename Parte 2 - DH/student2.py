@@ -34,7 +34,7 @@ def http_post_json(url: str, obj: dict) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 def main():
-    SERVER = "http://localhost:8000"
+    SERVER = "http://192.101.30.10:8000"
 
     print("=== CLIENTE: ===")
 
