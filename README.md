@@ -150,21 +150,9 @@ Los scripts están configurados con una IP específica en red local:
 - En `student2.py` (cliente):
   - `SERVER = "http://192.101.30.10:8000"`
 
-### Si tu IP es diferente
-Debes editar ambos archivos y reemplazar `192.101.30.10` por la IP real de la máquina servidor.
-
-Ejemplo:
-```python
-# student1.py
-host = "192.168.1.50"
-
-# student2.py
-SERVER = "http://192.168.1.50:8000"
-```
-
 ---
 
-## ▶️ Ejecución de la Parte 2 (DH + envío de archivo)
+## Ejecución de la Parte 2 (DH + envío de archivo)
 
 ### 1) Iniciar el servidor (Student 1)
 En la máquina que actuará como servidor:
