@@ -4,7 +4,7 @@ import json, base64, os
 
 import time
 
-import AES  # el AES.py de arriba
+import AES
 
 # =========================
 # Diffie-Hellman (SERVER)
@@ -75,7 +75,7 @@ class Handler(BaseHTTPRequestHandler):
         print("[Paso 4] B (cliente) recibido:")
         print(f"  B = {B}")
 
-        # Secreto compartido server
+        # Secreto compartido
         s_shared = pow(B, a, P)
         print("[Paso 6] Secreto compartido (server):")
         print(f"  s_shared = B^a mod p = {s_shared}")

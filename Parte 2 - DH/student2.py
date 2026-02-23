@@ -19,7 +19,6 @@ def http_post_json(url: str, obj: dict) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 def main():
-    # Si el server está en otra VM/host: cambia a su IP
     SERVER = "http://192.101.30.10:8000"
 
     print("=== CLIENTE: Diffie-Hellman + envío de archivo ===")

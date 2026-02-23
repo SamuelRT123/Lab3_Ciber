@@ -14,12 +14,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 HOST = "192.101.30.10"
 PORT = 5005
 
-ARCHIVO_A_ENVIAR = "archivo.txt"  # cambia la ruta si quieres
+#ARCHIVO_A_ENVIAR = "prueba.txt" # A diferencia de DH, ponerlo aqui para ver tiempos. 
+ARCHIVO_A_ENVIAR = "archivo.txt" #Esta linea es para pruebas locales antes de mandar a la VM
+
+BASE_DIR = os.getcwd()
+PRIVATE_PEM_PATH = os.path.join(BASE_DIR, "private.pem")
+PUBLIC_PEM_PATH = os.path.join(BASE_DIR, "public.pem")
 
 
-# =========================================================
-# TU "AES" (Fernet) basado en s_shared (copiado tal cual)
-# =========================================================
 def _fernet_from_shared(s_shared: int) -> Fernet:
     if not isinstance(s_shared, int):
         raise TypeError("s_shared debe ser int")
@@ -37,14 +39,12 @@ def _fernet_from_shared(s_shared: int) -> Fernet:
 
     return Fernet(fernet_key)
 
+
 def cifrar_bytes(data: bytes, s_shared: int) -> bytes:
     fernet = _fernet_from_shared(s_shared)
     return fernet.encrypt(data)
 
 
-# =========================
-# Socket framing helpers
-# =========================
 def recv_exact(sock: socket.socket, n: int) -> bytes:
     data = b""
     while len(data) < n:
@@ -54,9 +54,11 @@ def recv_exact(sock: socket.socket, n: int) -> bytes:
         data += chunk
     return data
 
+
 def send_block(sock: socket.socket, data: bytes) -> None:
     sock.sendall(struct.pack(">I", len(data)))
     sock.sendall(data)
+
 
 def recv_block(sock: socket.socket) -> bytes:
     raw_len = recv_exact(sock, 4)
@@ -64,19 +66,39 @@ def recv_block(sock: socket.socket) -> bytes:
     return recv_exact(sock, n)
 
 
-# =========================
-# RSA helpers
-# =========================
-def generar_rsa() -> Tuple[rsa.RSAPrivateKey, bytes]:
-    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    pub_pem = priv.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+def cargar_rsa_desde_pem() -> Tuple[rsa.RSAPrivateKey, bytes]:
+    """
+    Carga private.pem y public.pem desde la carpeta actual (donde se ejecuta el script).
+    Retorna:
+      - private key (objeto)
+      - public.pem en bytes (para enviarla por socket)
+    """
+    if not os.path.exists(PRIVATE_PEM_PATH):
+        raise FileNotFoundError(f"No se encontró: {PRIVATE_PEM_PATH}")
+    if not os.path.exists(PUBLIC_PEM_PATH):
+        raise FileNotFoundError(f"No se encontró: {PUBLIC_PEM_PATH}")
+
+    with open(PRIVATE_PEM_PATH, "rb") as f:
+        private_pem_bytes = f.read()
+
+    with open(PUBLIC_PEM_PATH, "rb") as f:
+        public_pem_bytes = f.read()
+
+    private_key = serialization.load_pem_private_key(
+        private_pem_bytes,
+        password=None, #Cambiar esto por la passphrase (Ver PDF)
     )
-    return priv, pub_pem
+
+    public_key = serialization.load_pem_public_key(public_pem_bytes)
+    if not isinstance(public_key, rsa.RSAPublicKey):
+        raise TypeError("public.pem no contiene una clave pública RSA válida.")
+
+    return private_key, public_pem_bytes
+
 
 def cargar_public_key(pem_bytes: bytes):
     return serialization.load_pem_public_key(pem_bytes)
+
 
 def rsa_oaep_cifrar(pub_pem: bytes, data: bytes) -> bytes:
     pub = cargar_public_key(pub_pem)
@@ -90,9 +112,6 @@ def rsa_oaep_cifrar(pub_pem: bytes, data: bytes) -> bytes:
     )
 
 
-# =========================
-# s_shared generator (int)
-# =========================
 def generar_s_shared_int(bits: int = 256) -> int:
     return secrets.randbits(bits)
 
@@ -104,8 +123,9 @@ def main():
     if not os.path.exists(ARCHIVO_A_ENVIAR):
         raise FileNotFoundError(f"No existe el archivo: {ARCHIVO_A_ENVIAR}")
 
-    print("[Client] Generando RSA (public/private)...")
-    client_priv, client_pub_pem = generar_rsa()
+    print("[Client] Cargando RSA desde public.pem y private.pem...")
+    client_priv, client_pub_pem = cargar_rsa_desde_pem()
+    
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f"[Client] Conectando a {HOST}:{PORT} ...")
@@ -117,7 +137,6 @@ def main():
         send_block(s, client_pub_pem)           # Client -> Server
         print(f"[Client] Recibida public key del server ({len(server_pub_pem)} bytes)")
 
-        # 2) Enviar timestamp para medir end-to-end en el server
         send_block(s, struct.pack(">d", t_inicio_e2e))
 
         # 3) Generar s_shared (int) y cifrarlo con RSA del server
@@ -129,7 +148,7 @@ def main():
         send_block(s, s_shared_cipher)
         print(f"[Client] Enviado s_shared cifrado (RSA-OAEP) ({len(s_shared_cipher)} bytes)")
 
-        # 4) Cifrar archivo con TU AES(Fernet) y enviar
+        # 4) Cifrar archivo con AES y enviar
         with open(ARCHIVO_A_ENVIAR, "rb") as f:
             data = f.read()
 
@@ -139,7 +158,7 @@ def main():
         send_block(s, filename_send.encode("utf-8"))
         send_block(s, data_enc)
 
-        print(f"[Client] OK ✅ Archivo cifrado y enviado: {filename_send} ({len(data_enc)} bytes)")
+        print(f"[Client] Archivo cifrado y enviado: {filename_send} ({len(data_enc)} bytes)")
 
     t_client_end = time.perf_counter()
     print(f"[Client] Tiempo total (cliente): {t_client_end - t_client_start:.6f} s")
